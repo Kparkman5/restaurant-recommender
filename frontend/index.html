@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Restaurant Tracker</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f9f9f9;
+    }
+    h1 { color: #333; }
+    .search-box {
+      position: relative;
+      width: 100%;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      box-sizing: border-box;
+      outline: none;
+    }
+    input[type="text"]:focus { border-color: #ff6b35; }
+    .suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 0 0 8px 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      z-index: 100;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .suggestion-item {
+      padding: 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .suggestion-item:hover { background: #fff5f2; }
+    .suggestion-main { font-weight: 500; color: #333; }
+    .suggestion-secondary { font-size: 13px; color: #888; margin-top: 2px; }
+    #status { margin-top: 12px; color: #888; font-style: italic; font-size: 14px; }
+    #result {
+      margin-top: 24px;
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      display: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    #result h2 { margin-top: 0; color: #333; }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .detail-label { color: #888; font-size: 14px; }
+    .detail-value { font-weight: 500; }
+    .open { color: green; }
+    .closed { color: red; }
+  </style>
+</head>
+<body>
+
+  <h1>🍜 Restaurant Tracker</h1>
+  <p>Search for a restaurant to add it to your list.</p>
+
+  <div class="search-box">
+    <input
+      type="text"
+      id="searchInput"
+      placeholder="Search for a restaurant..."
+      autocomplete="off"
+      oninput="handleInput()"
+    />
+    <div class="suggestions" id="suggestions" style="display:none"></div>
+  </div>
+
+  <div id="status"></div>
+  <div id="result"></div>
+
+  <script>
+    const BACKEND = 'http://localhost:3000';
+    let debounceTimer;
+
+    function handleInput() {
+      const query = document.getElementById('searchInput').value.trim();
+      clearTimeout(debounceTimer);
+
+      if (query.length < 2) {
+        hideSuggestions();
+        return;
+      }
+
+      debounceTimer = setTimeout(() => fetchSuggestions(query), 300);
+    }
+
+    async function fetchSuggestions(query) {
+      try {
+        const res = await fetch(`${BACKEND}/autocomplete?input=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        showSuggestions(data.predictions || []);
+      } catch (err) {
+        console.error('Autocomplete error:', err);
+      }
+    }
+
+    function showSuggestions(predictions) {
+      const box = document.getElementById('suggestions');
+      if (predictions.length === 0) {
+        hideSuggestions();
+        return;
+      }
+
+      box.innerHTML = predictions.map(p => `
+        <div class="suggestion-item" onclick="selectPlace('${p.place_id}', '${escapeQuotes(p.structured_formatting.main_text)}')">
+          <div class="suggestion-main">${p.structured_formatting.main_text}</div>
+          <div class="suggestion-secondary">${p.structured_formatting.secondary_text || ''}</div>
+        </div>
+      `).join('');
+
+      box.style.display = 'block';
+    }
+
+    function hideSuggestions() {
+      document.getElementById('suggestions').style.display = 'none';
+    }
+
+    function escapeQuotes(str) {
+      return str.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    }
+
+    async function selectPlace(placeId, name) {
+      document.getElementById('searchInput').value = name;
+      hideSuggestions();
+      setStatus(`Looking up ${name}...`);
+
+      try {
+        const res = await fetch(`${BACKEND}/place-details-by-id?place_id=${placeId}`);
+        const place = await res.json();
+        displayResult(place);
+        setStatus('');
+      } catch (err) {
+        setStatus('Error fetching place details.');
+      }
+    }
+
+    function displayResult(place) {
+      const hours = place.opening_hours;
+      const isOpen = hours?.open_now;
+      const weekdayText = hours?.weekday_text?.join('<br>') || 'Hours not available';
+      const price = place.price_level ? '$'.repeat(place.price_level) : 'N/A';
+      const types = place.types
+        ?.filter(t => !['point_of_interest','establishment','food'].includes(t))
+        ?.map(t => t.replace(/_/g, ' '))
+        ?.join(', ') || 'N/A';
+
+      document.getElementById('result').style.display = 'block';
+      document.getElementById('result').innerHTML = `
+        <h2>${place.name}</h2>
+        <div class="detail-row">
+          <span class="detail-label">Status</span>
+          <span class="detail-value ${isOpen ? 'open' : 'closed'}">
+            ${isOpen ? '✅ Open Now' : '❌ Closed'}
+          </span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Address</span>
+          <span class="detail-value">${place.formatted_address || 'N/A'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Cuisine</span>
+          <span class="detail-value">${types}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Price</span>
+          <span class="detail-value">${price}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Rating</span>
+          <span class="detail-value">${place.rating ? place.rating + ' ⭐' : 'N/A'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Phone</span>
+          <span class="detail-value">${place.formatted_phone_number || 'N/A'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Hours</span>
+          <span class="detail-value">${weekdayText}</span>
+        </div>
+      `;
+    }
+
+    function setStatus(msg) {
+      document.getElementById('status').innerText = msg;
+    }
+
+    // Close suggestions if clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.search-box')) hideSuggestions();
+    });
+  </script>
+
+</body>
+</html>
