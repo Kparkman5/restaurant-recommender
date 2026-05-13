@@ -4,6 +4,8 @@ const cors = require('cors');
 const multer = require('multer');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const axios = require('axios');
+const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 const app = express();
 app.use(cors());
@@ -119,6 +121,54 @@ app.get('/place-details-by-id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch place details' });
+  }
+});
+
+// ── Route 5: save restaurant ───────────────────────────────
+app.post('/save-restaurant', async (req, res) => {
+  try {
+    const { name, place_id, formatted_address, formatted_phone_number, website, rating, price_level, types, opening_hours } = req.body;
+
+    const cuisine = types
+      ?.filter(t => !['point_of_interest', 'establishment', 'food'].includes(t))
+      ?.map(t => t.replace(/_/g, ' '))
+      ?.join(', ') || null;
+
+    const { data, error } = await supabase
+      .from('restaurants')
+      .upsert({
+        name,
+        place_id,
+        formatted_address,
+        phone: formatted_phone_number,
+        website,
+        rating,
+        price_level,
+        cuisine,
+        hours: opening_hours,
+      }, { onConflict: 'place_id' });
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save restaurant' });
+  }
+});
+
+// ── Route 6: get all saved restaurants ─────────────────────
+app.get('/saved-restaurants', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch restaurants' });
   }
 });
 
