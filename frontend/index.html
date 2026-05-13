@@ -322,6 +322,10 @@
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.search-box')) hideSuggestions();
     });
+
+    function setStatus(msg) {
+        document.getElementById('status').innerText = msg;
+    }
   </script>
 
 </body>
