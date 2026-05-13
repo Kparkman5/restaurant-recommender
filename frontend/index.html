@@ -204,15 +204,16 @@
     }
 
     async function selectPlace(placeId, name) {
-      document.getElementById('searchInput').value = name;
-      hideSuggestions();
-      setStatus(`Looking up ${name}...`);
-      try {
-        const res = await fetch(`${BACKEND}/place-details-by-id?place_id=${placeId}`);
-        currentPlace = await res.json();
-        displayResult(currentPlace);
-        setStatus('');
-      } catch (err) { setStatus('Error fetching place details.'); }
+        document.getElementById('searchInput').value = name;
+        hideSuggestions();
+        setStatus(`Looking up ${name}...`);
+        try {
+            const res = await fetch(`${BACKEND}/place-details-by-id?place_id=${placeId}`);
+            currentPlace = await res.json();
+            currentPlace.place_id = placeId; // attach place_id since Google doesn't include it
+            displayResult(currentPlace);
+            setStatus('');
+        } catch (err) { setStatus('Error fetching place details.'); }
     }
 
     // ── Display Result ────────────────────────────────────
