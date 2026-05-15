@@ -216,11 +216,26 @@
         } catch (err) { setStatus('Error fetching place details.'); }
     }
 
+    function isOpenNow(hours) {
+        if (!hours || !hours.periods) return null;
+
+        const now = new Date();
+        const currentDay = now.getDay(); // 0=Sun, 6=Sat
+        const currentTime = now.getHours() * 100 + now.getMinutes(); // e.g. 1430 for 2:30 PM
+
+        return hours.periods.some(period => {
+            if (period.open.day !== currentDay) return false;
+            const openTime = parseInt(period.open.time);
+            const closeTime = parseInt(period.close.time);
+            return currentTime >= openTime && currentTime < closeTime;
+        });
+    }
+
     // ── Display Result ────────────────────────────────────
     function displayResult(place) {
       const hours = place.opening_hours;
-      const isOpen = hours?.open_now;
       const weekdayText = hours?.weekday_text?.join('<br>') || 'Hours not available';
+      const isOpen = hours?.open_now;
       const price = place.price_level ? '$'.repeat(place.price_level) : 'N/A';
       const types = place.types
         ?.filter(t => !['point_of_interest','establishment','food'].includes(t))
@@ -302,7 +317,7 @@
 
         container.innerHTML = restaurants.map(r => {
           const hours = r.hours;
-          const isOpen = hours?.open_now;
+          const isOpen = isOpenNow(hours);
           return `
             <div class="restaurant-card">
               <div class="card-header">
